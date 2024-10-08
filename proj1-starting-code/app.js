@@ -4,13 +4,15 @@ import { vec2, vec4, flatten } from "../../libs/MV.js";
 var gl;
 var canvas;
 var aspect;
-var buffer;
+var vBuffer;
+var cBuffer;
 
 var draw_program;
 var pointArray = [];
+var colorArray = [];
 var min_points = 4;
 var max_points = 256;
-
+var currentColor = [1.0, 1.0, 1.0, 1.0];
 
 /**
  * Resize event handler
@@ -42,9 +44,13 @@ function setup(shaders) {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    vBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, Float32Array.BYTES_PER_ELEMENT * 2 * max_points, gl.STATIC_DRAW);
+
+    cBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.BYTES_PER_ELEMENT * 4 * max_points, gl.STATIC_DRAW);
 
     // Handle resize events 
     window.addEventListener("resize", (event) => {
@@ -60,8 +66,24 @@ function setup(shaders) {
         return vec2(x, y);
     }
 
+
+    function get_random_color() {
+        const r = Math.random();
+        const g = Math.random();
+        const b = Math.random();
+        const opacity = Math.random();
+        return [r, g, b, opacity];
+    }
+
     // Handle mouse down events
     window.addEventListener("mousedown", (event) => {
+
+        if (pointArray.length === 0) {
+            currentColor = get_random_color();
+        }
+
+        colorArray.push(currentColor);
+
         if (pointArray.length < max_points) {
             const pos = get_pos_from_mouse_event(canvas, event);
             pointArray.push(pos);
@@ -72,6 +94,42 @@ function setup(shaders) {
             }
         }
     });
+
+    // Handle keydown events
+    function breakLine() {
+        // Reset point and color arrays
+        pointArray = [];
+        colorArray = [];
+
+        // Clear the screen
+        gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+
+    window.onkeydown = function (event) {
+        const key = event.key.toLowerCase();
+        switch (key) {
+            case 'z':
+                breakLine();
+                break;
+            case 'c':
+                break;
+            case '+':
+                break;
+            case '-':
+                break;
+            case '<':
+                break;
+            case '>':
+                break;
+            case ' ':
+                break;
+            case 'p':
+                break;
+            case 'l':
+                break;
+
+        }
+    };
 
     // Handle mouse move events
     window.addEventListener("mousemove", (event) => {
@@ -93,11 +151,11 @@ function setup(shaders) {
 }
 
 function drawLines() {
-    if (pointArray.length >= 4) {
+    if (pointArray.length >= min_points) {
         const vertices = flatten(pointArray);
 
         // Bind the buffer and upload the points
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(vertices));
 
         // Get position attribute location from the shader
@@ -106,6 +164,20 @@ function drawLines() {
         // Enable the attribute and point to the buffer data
         gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(positionLoc);
+
+
+        const colors = flatten(colorArray);
+
+        // Bind the color buffer and upload the colors
+        gl.bindBuffer(gl.ARRAY_BUFFER, cBuffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(colors));
+
+        const colorLoc = gl.getAttribLocation(draw_program, "a_color");
+        gl.bindBuffer(gl.ARRAY_BUFFER, cBuffer);
+        gl.vertexAttribPointer(colorLoc, 4, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(colorLoc);
+
+
     }
 }
 
@@ -130,7 +202,7 @@ function animate(timestamp) {
         gl.drawArrays(gl.POINTS, 0, pointArray.length);
 
         // Draw lines if we have 4 points
-        if (pointArray.length >= 4) {
+        if (pointArray.length >= min_points) {
             gl.drawArrays(gl.LINE_STRIP, 0, pointArray.length);
         }
 

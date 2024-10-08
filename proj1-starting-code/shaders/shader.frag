@@ -2,8 +2,9 @@
 
 precision mediump float;
 
-out vec4 frag_color;
+in vec4 v_color;
+out vec4 color;
 
 void main() {
-    frag_color = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+    color = v_color;
 }

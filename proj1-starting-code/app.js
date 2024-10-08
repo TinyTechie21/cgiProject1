@@ -33,8 +33,6 @@ function resize(target) {
     gl.viewport(0, 0, width, height);
 }
 
-
-
 function setup(shaders) {
     canvas = document.getElementById("gl-canvas");
     gl = setupWebGL(canvas, { alpha: true });
@@ -60,7 +58,6 @@ function setup(shaders) {
         resize(event.target);
     });
 
-
     function get_pos_from_mouse_event(canvas, event) {
         const rect = canvas.getBoundingClientRect();
         const x = (event.clientX - rect.left) / canvas.width * 2 - 1;
@@ -68,7 +65,6 @@ function setup(shaders) {
 
         return vec2(x, y);
     }
-
 
     function get_random_color() {
         const r = Math.random();
@@ -117,7 +113,6 @@ function setup(shaders) {
         breakPoints = [];
         pointArray = [];
         colorArray = [];
-
     }
 
     window.onkeydown = function (event) {
@@ -143,7 +138,6 @@ function setup(shaders) {
                 break;
             case 'l':
                 break;
-
         }
     };
 
@@ -220,8 +214,6 @@ function drawLines() {
         gl.bindBuffer(gl.ARRAY_BUFFER, cBuffer);
         gl.vertexAttribPointer(colorLoc, 4, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(colorLoc);
-
-
     }
 }
 
@@ -235,7 +227,6 @@ function animate(timestamp) {
     }
     // Elapsed time (in miliseconds) since last time here
     const elapsed = timestamp - last_time;
-
 
     gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -253,16 +244,12 @@ function animate(timestamp) {
             startIndex = breakIndex;
         });
 
-
-
         // Draw lines if we have 4 points
         if (pointArray.length - startIndex >= min_points) {
             // Draw points
             gl.drawArrays(gl.POINTS, startIndex, pointArray.length - startIndex);
             gl.drawArrays(gl.LINE_STRIP, startIndex, pointArray.length - startIndex);
         }
-
-
 
         gl.useProgram(null);
 

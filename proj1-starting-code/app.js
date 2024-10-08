@@ -6,14 +6,15 @@ var canvas;
 var aspect;
 var vBuffer;
 var cBuffer;
-
 var draw_program;
+
 var pointArray = [];
 var colorArray = [];
 var breakPoints = [];
 var min_points = 4;
-var max_points = 256;
+var max_points = 60000;
 var currentColor = [1.0, 1.0, 1.0, 1.0];
+var isDragging = false;
 
 /**
  * Resize event handler
@@ -76,22 +77,52 @@ function setup(shaders) {
 
     // Handle mouse down events
     window.addEventListener("mousedown", (event) => {
+        isDragging = true;
 
         if (pointArray.length === 0) {
             currentColor = get_random_color();
         }
 
+        getPoints(event);
+    });
+
+    function getPoints(event) {
         colorArray.push(currentColor);
+        const pos = get_pos_from_mouse_event(canvas, event);
+        pointArray.push(pos);
 
-        if (pointArray.length < max_points) {
+        if (pointArray.length >= min_points) {
+            // Once 4 points are captured, draw the lines
+            drawLines();
+        }
+    }
+
+    // Handle mouse move events
+    window.addEventListener("mousemove", (event) => {
+        if (isDragging) {
+            const thresholdDistance = 0.075;
             const pos = get_pos_from_mouse_event(canvas, event);
-            pointArray.push(pos);
 
-            if (pointArray.length >= min_points) {
-                // Once 4 points are captured, draw the lines
-                drawLines();
+            // Check the distance from the last point
+            if (pointArray.length > 0) {
+                const lastPoint = pointArray[pointArray.length - 1];
+                const distance = Math.sqrt(Math.pow(pos[0] - lastPoint[0], 2) + Math.pow(pos[1] - lastPoint[1], 2));
+
+                // Only add the new point if it's farther than the threshold
+                if (distance > thresholdDistance) {
+                    pointArray.push(pos);
+                    colorArray.push(currentColor);
+
+                    if (pointArray.length >= min_points) {
+                        drawLines();
+                    }
+                }
             }
         }
+    });
+    // Handle mouse up events
+    window.addEventListener("mouseup", (event) => {
+        isDragging = false;
     });
 
     // Handle 'z'
@@ -140,14 +171,6 @@ function setup(shaders) {
                 break;
         }
     };
-
-    // Handle mouse move events
-    window.addEventListener("mousemove", (event) => {
-    });
-
-    // Handle mouse up events
-    window.addEventListener("mouseup", (event) => {
-    });
 
     resize(window);
 

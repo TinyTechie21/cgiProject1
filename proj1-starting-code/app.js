@@ -10,6 +10,7 @@ var cBuffer;
 var draw_program;
 var pointArray = [];
 var colorArray = [];
+var breakPoints = [];
 var min_points = 4;
 var max_points = 256;
 var currentColor = [1.0, 1.0, 1.0, 1.0];
@@ -95,14 +96,26 @@ function setup(shaders) {
         }
     });
 
-    // Handle keydown events
+    // Handle 'z'
     function breakLine() {
-        // Reset point and color arrays
+        if (pointArray.length > min_points) {
+            if (breakPoints.length > 0) {
+                const currentLineLength = pointArray.length - breakPoints[breakPoints.length - 1];
+                if (currentLineLength >= min_points) {
+                    currentColor = get_random_color();
+                    breakPoints.push(pointArray.length);
+                }
+            }
+            else
+                breakPoints.push(pointArray.length);
+        }
+    }
+
+    function resetCurves() {
+        breakPoints = [];
         pointArray = [];
         colorArray = [];
 
-        // Clear the screen
-        gl.clear(gl.COLOR_BUFFER_BIT);
     }
 
     window.onkeydown = function (event) {
@@ -112,6 +125,7 @@ function setup(shaders) {
                 breakLine();
                 break;
             case 'c':
+                resetCurves();
                 break;
             case '+':
                 break;
@@ -159,7 +173,7 @@ function drawLines() {
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(vertices));
 
         // Get position attribute location from the shader
-        const positionLoc = gl.getAttribLocation(draw_program, "aPosition");
+        const positionLoc = gl.getAttribLocation(draw_program, "a_position");
 
         // Enable the attribute and point to the buffer data
         gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
@@ -198,13 +212,27 @@ function animate(timestamp) {
     if (pointArray.length >= 4) {
         gl.useProgram(draw_program);
 
-        // Draw points
-        gl.drawArrays(gl.POINTS, 0, pointArray.length);
+        let startIndex = 0;
+
+        // Draw each segment individually based on the break points
+        breakPoints.forEach((breakIndex) => {
+            if (breakIndex - startIndex >= min_points) {
+                gl.drawArrays(gl.POINTS, startIndex, breakIndex - startIndex);
+                gl.drawArrays(gl.LINE_STRIP, startIndex, breakIndex - startIndex);
+            }
+            startIndex = breakIndex;
+        });
+
+
 
         // Draw lines if we have 4 points
-        if (pointArray.length >= min_points) {
-            gl.drawArrays(gl.LINE_STRIP, 0, pointArray.length);
+        if (pointArray.length - startIndex >= min_points) {
+            // Draw points
+            gl.drawArrays(gl.POINTS, startIndex, pointArray.length - startIndex);
+            gl.drawArrays(gl.LINE_STRIP, startIndex, pointArray.length - startIndex);
         }
+
+
 
         gl.useProgram(null);
 

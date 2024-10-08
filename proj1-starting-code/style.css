@@ -17,7 +17,7 @@ body {
 .instructions {
     position: absolute;
     /* Absolute positioning */
-    top: 0px;
+    top: 500px;
     /* Distance from the top */
     left: 10px;
     /* Distance from the left */

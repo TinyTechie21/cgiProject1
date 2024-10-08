@@ -33,6 +33,8 @@ function resize(target) {
     gl.viewport(0, 0, width, height);
 }
 
+
+
 function setup(shaders) {
     canvas = document.getElementById("gl-canvas");
     gl = setupWebGL(canvas, { alpha: true });
@@ -98,7 +100,7 @@ function setup(shaders) {
 
     // Handle 'z'
     function breakLine() {
-        if (pointArray.length > min_points) {
+        if (pointArray.length >= min_points) {
             if (breakPoints.length > 0) {
                 const currentLineLength = pointArray.length - breakPoints[breakPoints.length - 1];
                 if (currentLineLength >= min_points) {
@@ -162,6 +164,34 @@ function setup(shaders) {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     window.requestAnimationFrame(animate);
+}
+
+/**
+ * Generate B-Spline curve points from control points
+ * @param {Array} points - Array of vec2 control points
+ */
+function generateBSplineCurve(points) {
+    curvePoints = [];
+
+    const steps = 100;  // Number of line segments
+    for (let t = 0; t <= 1; t += 1 / steps) {
+        const b0 = (1 - t) * (1 - t) * (1 - t) / 6;
+        const b1 = (3 * t * t * t - 6 * t * t + 4) / 6;
+        const b2 = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6;
+        const b3 = t * t * t / 6;
+
+        const x = b0 * points[0][0] +
+            b1 * points[1][0] +
+            b2 * points[2][0] +
+            b3 * points[3][0];
+
+        const y = b0 * points[0][1] +
+            b1 * points[1][1] +
+            b2 * points[2][1] +
+            b3 * points[3][1];
+
+        curvePoints.push(vec2(x, y));  // Store the curve point
+    }
 }
 
 function drawLines() {

@@ -4,20 +4,24 @@ import { vec2, vec4, flatten } from "../../libs/MV.js";
 var gl;
 var canvas;
 var aspect;
-var cPointBuffer;
-var colorBuffer;
-var curveBuffer;
 var draw_program;
 
-var pointArray = [];
-var colorArray = [];
+var curveList = [];  // Store all the curves
+var colorList = [];  // Store colors for each curve
+var pointSizeList = [];
+var controlPointList = [];
 var breakPoints = [];
-var curvePoints = [];
+var pointSpeedList = [];
 var min_points = 4;
 var max_points = 60000;
 var currentColor = [1.0, 1.0, 1.0, 1.0];
+var currentPointSize = 5.0;
+var currentCurveSpeed = 0.1;
 var isDragging = false;
+var showSegments = true;
+var showPoints = true;
 var segments = 5;
+var globalSpeed = 1;
 
 /**
  * Resize event handler
@@ -48,24 +52,25 @@ function setup(shaders) {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    cPointBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, cPointBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.BYTES_PER_ELEMENT * 2 * max_points, gl.STATIC_DRAW);
-
-    colorBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.BYTES_PER_ELEMENT * 4 * max_points, gl.STATIC_DRAW);
-
-    curveBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, curveBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.BYTES_PER_ELEMENT * 2 * max_points, gl.STATIC_DRAW);
-
     function get_random_color() {
         const r = Math.random();
         const g = Math.random();
         const b = Math.random();
         const opacity = Math.random() * 0.6 + 0.4;
         return [r, g, b, opacity];
+    }
+
+    // Generates a random value between 2 and 8
+    function get_random_size() {
+        return Math.random() * 6 + 2;
+    }
+
+    function get_random_point_speed(curveSpeed) {
+        return Math.random() / 50 + curveSpeed;
+    }
+
+    function get_random_curve_speed() {
+        return Math.random() / 2 + 0.1;
     }
 
     // Handle resize events 
@@ -85,19 +90,13 @@ function setup(shaders) {
     window.addEventListener("mousedown", (event) => {
         isDragging = true;
 
-        if (pointArray.length === 0) {
-            currentColor = get_random_color();
+        if (controlPointList.length === 0) {
+            randomize_curve_atributes();
         }
-        colorArray.push(currentColor);
         const pos = get_pos_from_mouse_event(canvas, event);
-        pointArray.push(pos);
-
-        if (pointArray.length >= min_points) {
-            // Once 4 points are captured, draw the lines
-            drawLines();
-            generateBSplineCurve(pointArray.slice(-4));
-        }
+        controlPointList.push(pos);
     });
+
 
     // Handle mouse move events
     window.addEventListener("mousemove", (event) => {
@@ -106,56 +105,73 @@ function setup(shaders) {
             const pos = get_pos_from_mouse_event(canvas, event);
 
             // Check the distance from the last point
-            if (pointArray.length > 0) {
-                const lastPoint = pointArray[pointArray.length - 1];
+            if (controlPointList.length > 0) {
+                const lastPoint = controlPointList[controlPointList.length - 1];
                 const distance = Math.sqrt(Math.pow(pos[0] - lastPoint[0], 2) + Math.pow(pos[1] - lastPoint[1], 2));
 
                 // Only add the new point if it's farther than the threshold
                 if (distance > thresholdDistance) {
-                    pointArray.push(pos);
-                    colorArray.push(currentColor);
-
-                    if (pointArray.length >= min_points) {
-                        drawLines();
-                    }
+                    controlPointList.push(pos);
                 }
             }
+            generateAndStoreCurve();
         }
     });
-    // Handle mouse up events
+
+    // In the mouse event, after adding points, call the function to generate and store curves
     window.addEventListener("mouseup", (event) => {
         isDragging = false;
+
+        // Store the curve when mouse is released and we have at least 4 points
+        generateAndStoreCurve();
     });
 
-    // Handle 'C'
-    function breakLine() {
-        if (pointArray.length >= min_points) {
+    function breakCurve() {
+        if (controlPointList.length >= min_points) {
+            // Check if there are enough points before breaking the line
             if (breakPoints.length > 0) {
-                const currentLineLength = pointArray.length - breakPoints[breakPoints.length - 1];
+                const currentLineLength = controlPointList.length - breakPoints[breakPoints.length - 1];
                 if (currentLineLength >= min_points) {
-                    currentColor = get_random_color();
-                    breakPoints.push(pointArray.length);
+
+                    // Store the current curve and prepare for a new one
+                    storeCurveAtributes(controlPointList.slice(breakPoints[breakPoints.length - 1]))
+
+                    // Randomize new curve's atributes
+                    randomize_curve_atributes();
+
+                    // Store curve break index
+                    breakPoints.push(controlPointList.length);
                 }
+            } else {
+                // First curve break
+                randomize_curve_atributes();
+                breakPoints.push(controlPointList.length);
             }
-            else {
-                currentColor = get_random_color();
-                breakPoints.push(pointArray.length);
-            }
+            // Clear pointArray to start collecting new control points
+            controlPointList = [];
         }
     }
+
+    function randomize_curve_atributes() {
+        currentColor = get_random_color();
+        currentPointSize = get_random_size();
+        currentCurveSpeed = get_random_curve_speed();
+    }
+
     // Handle 'C'
     function resetCurves() {
-        curvePoints = [];
+        curveList = [];
+        colorList = [];
+        pointSizeList = [];
         breakPoints = [];
-        pointArray = [];
-        colorArray = [];
+        controlPointList = [];
     }
 
     window.onkeydown = function (event) {
         const key = event.key.toLowerCase();
         switch (key) {
             case 'z':
-                breakLine();
+                breakCurve();
                 break;
             case 'c':
                 resetCurves();
@@ -168,15 +184,21 @@ function setup(shaders) {
                 if (segments > 1)
                     segments -= 1;
                 break;
-            case '<':
-                break;
             case '>':
+                if (globalSpeed < 2)
+                    globalSpeed + 0.1;
+                break;
+            case '<':
+                if (globalSpeed > 0.1)
+                    globalSpeed - 0.1
                 break;
             case ' ':
                 break;
             case 'p':
+                showPoints = !showPoints;
                 break;
             case 'l':
+                showSegments = !showSegments;
                 break;
         }
     };
@@ -193,77 +215,78 @@ function setup(shaders) {
 }
 
 /**
- * Generate B-Spline curve points from control points
- * @param {Array} points - Array of vec2 control points
+ * Draws the B-Spline curve in the shader for each set of control points.
+ * @param {Array} controlPoints - The control points for the curve (4 points)
+ * @param {Array} color - The color for the curve
+ * @param {int} segments - The number of segments for the curve
  */
-function generateBSplineCurve(points) {
-    for (let t = 0; t <= 1; t += 1 / segments) {
-        const b0 = (-t * t * t + 3 * t * t - 3 * t + 1) / 6;
-        const b1 = (3 * t * t * t - 6 * t * t + 4) / 6;
-        const b2 = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6;
-        const b3 = t * t * t / 6;
+function drawCurveInShader(controlPoints, color, segments, pointSize, pointSpeed) {
+    // Use the draw program
+    gl.useProgram(draw_program);
 
-        const x = b0 * points[0][0] +
-            b1 * points[1][0] +
-            b2 * points[2][0] +
-            b3 * points[3][0];
+    // Pass the control points to the shader
+    const uControlPointsLoc = gl.getUniformLocation(draw_program, "u_controlPoints");
+    gl.uniform2fv(uControlPointsLoc, flatten(controlPoints));
 
-        const y = b0 * points[0][1] +
-            b1 * points[1][1] +
-            b2 * points[2][1] +
-            b3 * points[3][1];
+    // Pass the color to the shader
+    const uColorLoc = gl.getUniformLocation(draw_program, "u_color");
+    gl.uniform4fv(uColorLoc, color);
 
-        curvePoints.push(vec2(x, y));  // Store the curve point
+    // Pass the number of segments to the shader
+    const uSegmentsLoc = gl.getUniformLocation(draw_program, "u_segments");
+    gl.uniform1i(uSegmentsLoc, segments);
+
+    // Pass the point size to the shader
+    const uPointSizeLoc = gl.getUniformLocation(draw_program, "u_pointSize");
+    gl.uniform1f(uPointSizeLoc, pointSize);
+
+    const uPointSpeedLoc = gl.getUniformLocation(draw_program, "u_pointSpeed");
+    gl.uniform1f(uPointSpeedLoc, pointSpeed);
+
+    if (showSegments)
+        gl.drawArrays(gl.LINE_STRIP, 0, segments + 1);
+
+    if (showPoints)
+        gl.drawArrays(gl.POINTS, 0, segments + 1);
+
+    gl.useProgram(null);
+}
+
+/**
+ * Draws all the curves that have been added so far
+ */
+function drawAllCurves() {
+    for (let i = 0; i < curveList.length; i++) {
+        const controlPoints = curveList[i];
+        const color = colorList[i];
+        const pointSize = pointSizeList[i];
+        const pointSpeed = pointSpeedList[i];
+        drawCurveInShader(controlPoints, color, segments, pointSize, pointSpeed);
     }
 }
 
-function drawLines() {
-    if (pointArray.length >= min_points) {
-        const vertices = flatten(pointArray);
+// Call this function when new control points are added and enough points (at least 4) are present
+function generateAndStoreCurve() {
+    if (controlPointList.length >= 4) {
+        // Extract the last 4 control points for the current curve
+        const controlPoints = controlPointList.slice(-4);
 
-        // Bind the buffer and upload the points
-        gl.bindBuffer(gl.ARRAY_BUFFER, cPointBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(vertices));
-
-        // Get position attribute location from the shader
-        const positionLoc = gl.getAttribLocation(draw_program, "a_position");
-
-        // Enable the attribute and point to the buffer data
-        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(positionLoc);
-
-        const colors = flatten(colorArray);
-
-        // Bind the color buffer and upload the colors
-        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(colors));
-
-        const colorLoc = gl.getAttribLocation(draw_program, "a_color");
-        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-        gl.vertexAttribPointer(colorLoc, 4, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(colorLoc);
+        // Store the control points and color for this curve
+        storeCurveAtributes(controlPoints);
     }
 }
 
-function drawCurve() {
-
-    if (curvePoints.length > min_points) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, curveBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, flatten(curvePoints));
-
-        const positionLoc = gl.getAttribLocation(draw_program, "a_position");
-        gl.enableVertexAttribArray(positionLoc);
-        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
-
-        // Draw the B-Spline curve with a line strip
-        gl.lineWidth(2);
-        gl.drawArrays(gl.LINE_STRIP, 0, curvePoints.length);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    }
-}
-
+// In the animation loop, clear the canvas once and draw all the stored curves
 let last_time;
+
+function storeCurveAtributes(controlPoints) {
+    curveList.push(controlPoints);
+    colorList.push(currentColor);
+    pointSizeList.push(currentPointSize);
+    pointSpeedList.forEach(point => {
+        point.push(get_random_point_speed(currentCurveSpeed));
+    });
+}
 
 function animate(timestamp) {
     window.requestAnimationFrame(animate);
@@ -271,35 +294,14 @@ function animate(timestamp) {
     if (last_time === undefined) {
         last_time = timestamp;
     }
-    // Elapsed time (in miliseconds) since last time here
-    const elapsed = timestamp - last_time;
 
+    // Clear the canvas only once per frame
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    if (pointArray.length >= 4) {
-        gl.useProgram(draw_program);
+    // Draw all stored curves
+    drawAllCurves();
 
-        let startIndex = 0;
-
-        // Draw each segment individually based on the break points
-        breakPoints.forEach((breakIndex) => {
-            if (breakIndex - startIndex >= min_points) {
-                gl.drawArrays(gl.POINTS, startIndex, breakIndex - startIndex);
-                gl.drawArrays(gl.LINE_STRIP, startIndex, breakIndex - startIndex);
-            }
-            startIndex = breakIndex;
-        });
-
-        // Draw lines if we have 4 points
-        if (pointArray.length - startIndex >= min_points) {
-            // Draw points
-            gl.drawArrays(gl.POINTS, startIndex, pointArray.length - startIndex);
-            gl.drawArrays(gl.LINE_STRIP, startIndex, pointArray.length - startIndex);
-        }
-
-        gl.useProgram(null);
-
-        last_time = timestamp;
-    }
+    last_time = timestamp;
 }
+
 loadShadersFromURLS(["shader.vert", "shader.frag"]).then(shaders => setup(shaders))

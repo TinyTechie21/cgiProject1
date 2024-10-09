@@ -13,3 +13,26 @@ body {
 .container {
     position: relative;
 }
+
+.instructions {
+    position: absolute;
+    /* Absolute positioning */
+    top: 450px;
+    /* Distance from the top */
+    left: 10px;
+    /* Distance from the left */
+    color: white;
+    /* Text color */
+    font-family: Arial, sans-serif;
+    /* Font style */
+    font-size: 16px;
+    /* Font size */
+    background-color: rgba(0, 0, 0, 0.5);
+    /* Semi-transparent background */
+    padding: 10px;
+    /* Padding around the text */
+    border-radius: 5px;
+    /* Rounded corners */
+    z-index: 10;
+    /* Ensure it appears above the canvas */
+}
